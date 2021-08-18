@@ -48,7 +48,7 @@ def get_1d_data(heatmap, target):
     
     return X.reshape(-1,1), Y.reshape(-1, 1)
 
-def get_2d_data(heatmap, target, MSE=False, normalize=False):
+def get_2d_data(heatmap1, heatmap2, target, MSE=False, normalize=False, clipping=False):
     """ This function takes the data from a given heatmap and returns the a distance metric to create a 
     Y parameter for the Gaussian Process. 
     
@@ -58,10 +58,12 @@ def get_2d_data(heatmap, target, MSE=False, normalize=False):
         
     Inputs
     ------
-    heatmap : Pandas pivot table [which is also a dataframe]
+    heatmap1, heatmap2 : Pandas pivot tables [which is also a dataframe]
         32 x 32 pivot table containing every combination of stimulation electrode/recording electrode and a metric
         This is obtained from get_delta_heatmap() in multi_unit_plotting_functions.py
         This should correspond to a given brain area (PMd, PMv, Area 5, M1)
+        
+        There are 2 heatmaps to correspond with normalizing better
     
     target : 1d array
         The target to compare each entry of the heatmap to. It needs to be the same dimension as the heatmap (32)
@@ -75,7 +77,11 @@ def get_2d_data(heatmap, target, MSE=False, normalize=False):
     normalize : bool
         Code use to toggle normalizing the data. 1 if yes, 0 if not
     
-    
+    clipping : bool
+        Code to apply clipping to the data (i.e. a method to remove outliers)
+        1 if yes, 0 if not. 
+        The clipping threshold is determined by a z-score > 3
+        
     Outputs
     -------
     X : 32 x 2 array
@@ -117,31 +123,51 @@ def get_2d_data(heatmap, target, MSE=False, normalize=False):
             X[1][i] = 7- i%8
     
     # Y
-    
     def SSD(target, col):
         # Squared Sum of Differences
         return ((target - col)**2).sum()
     
-    Y = np.empty_like(target)
-    for i in range(len(heatmap.columns)):
+    
+    Y1 = np.empty_like(target); Y2 = np.empty_like(target)
+    
+    for i in range(len(heatmap1.columns)):
         if MSE:
-            Y[i] = -mean_squared_error(target, heatmap[heatmap.columns[i]].values)
-            
+            Y1[i] = -mean_squared_error(target, heatmap1[heatmap1.columns[i]].values)
+            Y2[i] = -mean_squared_error(target, heatmap2[heatmap2.columns[i]].values)
         else:
-            Y[i] = -SSD(target, heatmap[heatmap.columns[i]].values)
-      
+            Y1[i] = -SSD(target, heatmap1[heatmap1.columns[i]].values)
+            Y2[i] = -SSD(target, heatmap2[heatmap2.columns[i]].values)
+     
+    # If clipping
+    if clipping:
+        # z-score the data to determine standard deviations
+        zY1 = np.abs(z_score(Y1))
+        zY2 = np.abs(z_score(Y2))
+        # Determine how many values to clip
+        clip_1 = len(np.where(zY1 > 3))
+        clip_2 = len(np.where(zY2 > 3))
+        # Clip the data
+        if clip_1 > 0:
+            Y1 = np.clip(Y1.flatten(), np.sort(Y1.flatten())[clip_1], None).reshape(-1, 1)
+        if clip_2 > 0:
+            Y2 = np.clip(Y2.flatten(), np.sort(Y2.flatten())[clip_2], None).reshape(-1, 1)
+
+    
     # Normalize Y
     if normalize:
-        for i in range(len(Y)):
-            Y[i] = (Y[i]-Y.min())/(Y.max()-Y.min())
+        ymax = np.max((Y1, Y2))
+        ymin = np.min((Y1, Y2))
+        for i in range(len(Y1)):
+            Y1[i] = (Y1[i] - ymin)/np.abs((ymax-ymin))
+            Y2[i] = (Y2[i] - ymin)/np.abs((ymax-ymin))
+#             Y[i] = (Y[i]-Y.min())/(Y.max()-Y.min())
         
-    return X.T, Y.reshape(-1, 1)
+    return X.T, Y1.reshape(-1, 1), Y2.reshape(-1,1)
+
 
 #--------------------------------------------------------------------------------------------------------------
 # Functions to fit the data to the GP using GPy
 #--------------------------------------------------------------------------------------------------------------
-
-
 
 def fit_GP(kernel, X, Y, constraints=None, bounded=True):
     """ This function fits the GP and returns the mean and st.dev of the fit
@@ -346,14 +372,61 @@ def append_random_search(x_search, y_search, X, Y, replace=True):
 
 # UCB function from Leo
 def UCB(model, search_space, alpha=2):
+    """
+    Function that defines the Upper Confidence Bound function
+    Written by another lab member (github.com/Alongthoselines)
+    
+    UCB = mean + alpha * variance
+    
+    Inputs
+    ------
+    model : GPy model
+        Model to predict the next query point for
+        
+    search_space : Array
+        An array of all possible search space values. 
+        In the context of my other code, this corresponds to X usually
+        
+    alpha : double
+        UCB hyperparameter
+        
+    Output
+    ------
+    Returns a vector of size(search_space) containing the UCB of the model's predictions
+    """
+    
     if len(search_space.shape)<2:
         mu, std = model.predict(search_space[:, None])
     else:
         mu, std = model.predict(search_space)
     return mu + alpha*std
 
- # nextX function from Leo
+
 def nextX(model, search_space, alpha=2):
+    """
+    Function that defines the Upper Confidence Bound function
+    Written by another lab member (github.com/Alongthoselines)
+    
+    UCB = mean + alpha * variance
+    
+    Inputs
+    ------
+    model : GPy model
+        Model to predict the next query point for
+        
+    search_space : Array
+        An array of all possible search space values. 
+        In the context of my other code, this corresponds to X usually
+        
+    alpha : double
+        UCB hyperparameter
+        
+    Output
+    ------
+    Returns the point to query next (in the context of the functions here, it would be the 1 row of X)
+    """
+    
+    
     return UCB(model, search_space, alpha).argmax()
 
 def append_nextXY(X, Y, x_search, y_search, model, search_space, alpha=2):
@@ -596,3 +669,77 @@ def get_best_fit_values(electrode, location, PMd_heatmap, PMv_heatmap):
         return PMd_heatmap[electrode]
     else:
         return PMv_heatmap[electrode]
+    
+#--------------------------------------------------------------------------------------------------------------
+# Functions for synthetic data "online" trials
+#--------------------------------------------------------------------------------------------------------------
+def generate_synthetic_data(heatmap1, heatmap2, target, stdev=4, MSE = False, normalize=False, clipping=False):
+    """
+    This function creates a syntethic dataset based on adding Gaussian noise to a given heatmap 10 times. 
+    It is meant to mimic a moderately repeatable online experiment, where each recorded response is not perfect. 
+    
+    Inputs
+    ------
+    heatmap1, heatmap2 : Pandas Dataframe
+        Heatmaps to generate synthetic data from
+        
+    variance : float
+        Variance to add gaussian noise to
+        
+    target : 1d array
+        The target to compare each entry of the heatmap to. It needs to be the same dimension as the heatmap (32)
+            
+    MSE : bool
+        Code to use squared sum of differences (SSD) to build the objective function (Y), otherwise 
+        mean squared error (MSE) will be used
+        1/True for SSD
+        0/False for MSE
+    
+    normalize : bool
+        Code use to toggle normalizing the data. 1 if yes, 0 if not
+        
+     clipping : bool
+        Code to apply clipping to the data (i.e. a method to remove outliers)
+        This will only be used if normalizing the data, as it is a normalization method
+        1 if yes, 0 if not. 
+        The clipping threshold is determined by a z-score > 3    
+    
+    
+    Outputs 
+    -------
+    X : 32 x 2 array
+        Each row contains [x-coord, y-coord] of a given electrode to match this spatial arrangement
+        X array                           FMA arrangement
+        24 | 16 | 8  | 0                  28 | 20 | 10 | 2 
+        25 | 17 | 9  | 1       |-----\    29 | 21 | 11 | 3
+        26 | 18 | 10 | 2       |      \   30 | 22 | 12 | 4
+        27 | 19 | 11 | 3       |      /   31 | 23 | 13 | 5
+        28 | 20 | 12 | 4       |-----/    32 | 24 | 14 | 6
+        29 | 21 | 13 | 5                  33 | 25 | 15 | 7
+        30 | 22 | 14 | 6                  34 | 26 | 16 | 8
+        31 | 23 | 15 | 7                  35 | 27 | 17 | 9
+    NOTE: in the FMA arrangement the cells are shifted, which do not fully represent the actual arrangement due to the placements of the grounds.
+    
+    Y_synthetic1, Y_synthetic2 : 10x32 array
+        Objective function for a given stimulation electrode for each of the synthetic data sets
+        It can be either the squared sum of differences (SSD) or the mean squared error (MSE).
+        It can also be normalized or not depending on the inputs to the function
+        The values are multiplied by -1 to turn it into a maximization problem
+    
+   # synthetic_heatmaps : list of 10 32x32 Pandas dataframes
+   #     Contains 10 heatmaps based on the inputted heatmap with added Gaussian noise to it
+   # Not used anymore
+    """
+#     # Copy the heatmap and add noise to it creating 10 new heatmaps with Gaussian noise compared to the original 
+    synthetic_heatmaps1 = [(heatmap1 + np.random.normal(loc=0, scale=stdev, size=np.shape(heatmap1))) for i in range(10)]
+    synthetic_heatmaps2 = [(heatmap2 + np.random.normal(loc=0, scale=stdev, size=np.shape(heatmap1))) for i in range(10)]
+    
+    # Create the objective function 
+    Y_synthetic1 = [np.empty((1, 32)) for i in range(10)]
+    Y_synthetic2 = [np.empty((1, 32)) for i in range(10)]
+    
+    for i in range(10):
+        X, Y_synthetic1[i], Y_synthetic2[i] = get_2d_data(synthetic_heatmaps1[i],synthetic_heatmaps1[i], target, MSE=MSE, normalize=normalize, \
+                                                          clipping=clipping)
+    # Return
+    return X, Y_synthetic1, Y_synthetic2

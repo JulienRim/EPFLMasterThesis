@@ -198,8 +198,21 @@ def load_block_stim_data(block_number, block_path, root_dir = os.getcwd(), two_s
 
 ############################ Multi-unit functions
 
-# Adapted from Parikshat
+
 def z_score(x):
+    """
+    Function to z-score (zero-mean and unit variance) a signal given in x
+    # Adapted from P.Sirpal (https://github.com/sirpalp)
+    
+    Input
+    -----
+    x: 1d vector
+        Signal to z-score
+        
+    Output
+    ------
+    outputs the z-score signal
+    """
     x = x.reshape(1, -1)
     ss = StandardScaler(with_mean=True, with_std=True)
     Xz = ss.fit_transform(x.T).T
@@ -231,10 +244,6 @@ def extract_baseline(raw_signal, fs, stimulation_data, baseline_time=50):
         Contains sampled windows from the raw_signal that are concatenated together to give a baseline
         Useful for determining a consistant mean baseline signal to remove from the signal or to use for thresholds.
         
-    bl_total_time : float
-        Contains the total amount of time sampled for the baseline. 
-        Can be used to generate spike rates or threshold crossing rates
-        
     inds : 1-d (flattened) array
         Contains the indices from the baseline extraction
     """
@@ -260,7 +269,7 @@ def extract_baseline(raw_signal, fs, stimulation_data, baseline_time=50):
 
 
 
-def extract_signal(raw_signal, fs, stimulation_data, wtime, art_time=0, baseline=np.empty([])):
+def extract_signal(raw_signal, fs, stimulation_data, wtime, art_time=2.9, baseline=np.empty([])):
     """ Extract the desired signal after stimulation with the following considerations:
         - time after the stimulation to consider as the artifact
         - time before the stimulation to consider as the baseline signal
@@ -687,6 +696,7 @@ def MUA_stream_extract(stream, stimulation_data, wtime=200, baseline_time=300, a
             results[ind]['bl_crossings'] = bl[pulse]
             results[ind]['bl_mean'] = bl_mean[pulse] # 
             results[ind]['crossing_rate'] = crossing_rates[pulse]
+            results[ind]['nstdevs'] = nstdevs
             
             # Local baseline crossing rate (before the pulse train)
             results[ind]['BCR_local'] = bl[pulse]/baseline_time*1000
@@ -700,6 +710,7 @@ def MUA_stream_extract(stream, stimulation_data, wtime=200, baseline_time=300, a
             # Difference in rates (gBCR compares to global baseline, 2nd line to local baseline)
             results[ind]['delta_rate_gBCR'] = crossing_rates[pulse] - bl_crossing_rate
             results[ind]['delta_rate'] = results[ind]['n_crossings']/wtime*1000 - results[ind]['bl_crossings']/baseline_time*1000
+            results[ind]['delta_rate2'] = results[ind]['crossing_rate'] - results[ind]['BCR_local']
             
               # Get the mean signal value after stimulation (not useful)
 #             results[ind]['signal_mean'] = np.mean(sig[pulse][sig[pulse]!=0])

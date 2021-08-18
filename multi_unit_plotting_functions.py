@@ -15,7 +15,7 @@ from itertools import product
 from GP_functions import *
 
 ###############################
-def get_delta_heatmap(df, column_name = 'rates_diff', sort=True):
+def get_delta_heatmap(df, column_name = 'delta_rate', sort=True):
     """ Get the mean of the change in threshold crossing rates based on the electrode number and the stimulation channel.
         This creates a heatmap sorted to give most inihibitory to most excitatory (or not)
     
@@ -54,7 +54,7 @@ def get_delta_heatmap(df, column_name = 'rates_diff', sort=True):
 
 def fma_rec_spatial(delta_heatmap, stim_channel):
     """ Function to plot the changes in threshold crossings based on the spatial arangement of the electodes
-        (Currently only for FMA) for recording channels
+        (for FMA) for recording channels
     
     Inputs 
     ------
@@ -120,7 +120,7 @@ def fma_rec_spatial(delta_heatmap, stim_channel):
 
 def fma_stim_spatial(delta_heatmap, rec_channel):
     """ Function to plot the changes in threshold crossings based on the spatial arangement of the electodes
-        (Currently only for FMA) for stimulation channels
+        (for FMA) for stimulation channels
     
     Inputs 
     ------
@@ -291,6 +291,33 @@ def get_electrode_maps(stream, block_number, verbose=True):
 
 def utah_stim_spatial(delta_heatmap, rec_channel):
     
+     """ Function to plot the changes in threshold crossings based on the spatial arangement of the electodes
+        (for Utah array) for stimulation channels
+    
+    Inputs 
+    ------
+    delta_heatmap : pandas pivot table
+        Sorted pivot table that has the average change in threshold crossings per stimulation channel and recording electrode
+        
+    rec_channel : int
+        The recording channel used to plot the spatial arangements of stimulations
+        Suggested inputs:
+            delta_heatmap.loc[rec_channel].name    - specific recording channel (will give error if it is not available)
+            delta_heatmap.iloc[rec_channel].name   - recording channel by index of the heatmap
+                                                            e.g. delta_heatmap.iloc[0] gives the top channel
+                                                                 delta_heatmap.iloc[31] gives the bottom channel
+            delta_heatmap.sample().index           - random recording channel
+            
+    s_config : string
+        Basically a way to determine if the plot will be made on the Utah array or the FMA array
+    
+    Outputs
+    -------
+    spatial_array : numpy array
+        spatial array with the number of threshold crossings for each corresponding electrode
+    """
+    
+    
     # Get the data and change column name to avoid errors
     thr_delta = pd.DataFrame(delta_heatmap.loc[rec_channel]).reset_index()
     thr_delta = thr_delta.rename(columns={thr_delta.columns[1] : 'delta'})
@@ -332,6 +359,30 @@ def utah_stim_spatial(delta_heatmap, rec_channel):
 
 
 def utah_rec_spatial(delta_heatmap, stim_channel):
+    
+    """ Function to plot the changes in threshold crossings based on the spatial arangement of the electodes
+        (for Utah array) for recording channels
+    
+    Inputs 
+    ------
+    delta_heatmap : pandas pivot table
+        Sorted pivot table that has the average change in threshold crossings per stimulation channel and recording electrode
+        
+    stim_channel : int
+        The stimulation channel used to plot the spatial arangements 
+        
+        Suggested inputs:
+            delta_heatmap[stim_channel].name    - specific channel
+            delta_heatmap.columns[0]               - most inhibitory channel
+                                                     since they are sorted, 0 is most inhibitory, 1 is the next most inhibitory etc.
+            delta_heatmap.columns[-1]              - most excitatory channel
+                                                     since they are sorted, -1 is most excitatory, -2 is the next most excitatory etc. 
+    
+    Outputs
+    -------
+    spatial_array : numpy array
+        spatial array with the number of threshold crossings for each corresponding electrode
+    """
 
     # Get the data and change column name to avoid errors
     thr_delta = pd.DataFrame(delta_heatmap[stim_channel]).reset_index()
@@ -376,8 +427,25 @@ def utah_rec_spatial(delta_heatmap, stim_channel):
 
 
 def plot_spatials(delta_heatmap=None, channel=None, s_config=None, r_config=None, electrode_values=None):
-    """ This function just calls the other plotting functions so that I do not need to change my code when
-        I want to look at different streams. 
+    """ This function will return heatmap values for the different combinations. 
+        In general, using electrode_values = delta_heatmap[column_no] is most used
+    
+    delta_heatmap : pandas pivot table
+        Sorted pivot table that has the average change in threshold crossings per stimulation channel and recording electrode
+    
+    channel : int
+        The channel used to plot the spatial arangements of stimulations 
+        
+    s_config/r_config : string
+        Basically a way to determine if the plot will be made on the Utah array or the FMA array
+        ** See fma_stim_spatial(), utah_stim_spatial(), fma_rec_spatial(), utah_rec_spatial()
+        
+    electrode_values : 32 x 1 array
+        Electrode values to plot for an FMA array. 
+        
+    Output
+    ------
+    Formatted heatmap values to be used with sns.heatmap() for instance
     """
     
     # This will plot the data if it is not stored in a Pandas dataframe
@@ -446,7 +514,7 @@ def plot_fma(fma_values):
 # Mock online functions
 #-------------------------------------------------------------------------------------
 
-def get_online_heatmaps(df, column_name = 'rates_diff', ntrials=10, sort=False): 
+def get_online_heatmaps(df, column_name = 'delta_rate', ntrials=10, sort=False): 
     """ Get heatmaps that compare the change in the threshold crossing rates based on 
     the electrode number and the stimulation channel. 
         By default it will not be sorted to to give most inhibitory to most excitatory, 
