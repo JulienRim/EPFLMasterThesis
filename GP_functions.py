@@ -9,12 +9,14 @@ from scipy import interpolate
 from collections import defaultdict
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error
-from mpl_toolkits import mplot3d
 from itertools import product
-from multi_unit_functions import *
-from multi_unit_plotting_functions import *
 
-# Updated July 20th, 2021
+
+from multi_unit_plotting_functions import *
+from multi_unit_functions import *
+from multi_unit_functions import z_score # for some reason this is needed... not sure why
+
+# Updated August 23rd, 2021
 
 #--------------------------------------------------------------------------------------------------------------
 # Functions to prepare data to feed to the GP
@@ -97,8 +99,8 @@ def get_2d_data(heatmap1, heatmap2, target, MSE=False, normalize=False, clipping
         31 | 23 | 15 | 7                  35 | 27 | 17 | 9
     NOTE: in the FMA arrangement the cells are shifted, which do not fully represent the actual arrangement due to the placements of the grounds. 
     
-    Y : Nx1 array
-        Objective function for a given stimulation electrode. 
+    Y1/Y1 : Nx1 arrays
+        Objective function for a given stimulation electrode from heatmap 1/2
         It can be either the squared sum of differences (SSD) or the mean squared error (MSE).
         It can also be normalized or not depending on the inputs to the function
         The values are multiplied by -1 to turn it into a maximization problem

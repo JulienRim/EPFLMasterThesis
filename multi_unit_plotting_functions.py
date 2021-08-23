@@ -1,5 +1,6 @@
 import tdt
 import os 
+import hdbscan
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -289,8 +290,7 @@ def get_electrode_maps(stream, block_number, verbose=True):
 
 
 def utah_stim_spatial(delta_heatmap, rec_channel):
-    
-     """ Function to plot the changes in threshold crossings based on the spatial arangement of the electodes
+    """ Function to plot the changes in threshold crossings based on the spatial arangement of the electodes
         (for Utah array) for stimulation channels
     
     Inputs 
@@ -315,7 +315,7 @@ def utah_stim_spatial(delta_heatmap, rec_channel):
     spatial_array : numpy array
         spatial array with the number of threshold crossings for each corresponding electrode
     """
-    
+
     
     # Get the data and change column name to avoid errors
     thr_delta = pd.DataFrame(delta_heatmap.loc[rec_channel]).reset_index()
